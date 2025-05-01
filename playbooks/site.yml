@@ -9,7 +9,7 @@
     - podman
     - jenkins
     - nginx
-    - google_sdk
+    - google-sdk
     - microk8s
     - minikube
     - packer
