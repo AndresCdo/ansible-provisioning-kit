@@ -11,7 +11,7 @@
 
 - name: Configure NGINX for Jenkins
   ansible.builtin.template:
-    src: templates/jenkins.conf.j2
+    src: jenkins.conf.j2
     dest: /etc/nginx/conf.d/jenkins.conf
     mode: "0644"
   notify: test nginx config
