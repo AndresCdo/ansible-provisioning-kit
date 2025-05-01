@@ -23,15 +23,15 @@
     groups: microk8s
     append: yes
 
-- name: Enable basic MicroK8s add-ons
-  command: microk8s enable dns storage
-  # Check if command exists instead of relying on pkg_mgr fact
-  when: microk8s_path.stat.exists
-
 - name: Check if microk8s command exists
   stat:
     path: /snap/bin/microk8s
   register: microk8s_path
+
+- name: Enable basic MicroK8s add-ons
+  command: microk8s enable dns storage
+  # Check if command exists instead of relying on pkg_mgr fact
+  when: microk8s_path.stat.exists
 
 - name: Check MicroK8s status
   become: false # Run as user
