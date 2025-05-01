@@ -14,17 +14,24 @@
     line: /usr/bin/zsh
     state: present
 
+- name: Get user home directory
+  become: false
+  shell: echo $HOME
+  register: user_home
+  changed_when: false
+
 - name: Check if Oh My Zsh is installed
+  become: false
   stat:
-    path: "{{ ansible_env.HOME }}/.oh-my-zsh"
+    path: "{{ user_home.stdout }}/.oh-my-zsh"
   register: oh_my_zsh_installed
 
 - name: Install Oh My Zsh
   become: false
   shell: |
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
   args:
-    creates: "{{ ansible_env.HOME }}/.oh-my-zsh"
+    creates: "{{ user_home.stdout }}/.oh-my-zsh"
   when: not oh_my_zsh_installed.stat.exists
 
 - name: Set Zsh as the default shell
@@ -33,6 +40,7 @@
     shell: /usr/bin/zsh
 
 - name: Verify Zsh is the default shell
+  become: false
   shell: echo $SHELL
   register: default_shell
   changed_when: false
@@ -43,24 +51,24 @@
     msg: "Default shell is {{ default_shell.stdout }}"
 
 - name: Copy .zshrc template if it doesn't exist
+  become: false
   ansible.builtin.copy:
-    src: "{{ ansible_env.HOME }}/.oh-my-zsh/templates/zshrc.zsh-template"
-    dest: "{{ ansible_env.HOME }}/.zshrc"
+    src: "{{ user_home.stdout }}/.oh-my-zsh/templates/zshrc.zsh-template"
+    dest: "{{ user_home.stdout }}/.zshrc"
     remote_src: yes
     force: no
   when: oh_my_zsh_installed.stat.exists
-  become: false
 
 - name: Configure a custom theme for Oh My Zsh (optional)
+  become: false
   ansible.builtin.lineinfile:
-    path: "{{ ansible_env.HOME }}/.zshrc"
+    path: "{{ user_home.stdout }}/.zshrc"
     regexp: '^ZSH_THEME="(.*)"'
     line: 'ZSH_THEME="agnoster"' # Example theme
     backrefs: yes
-  when: oh_my_zsh_installed.stat.exists # Only configure if .zshrc exists
-  become: false # Edit user's file
+  when: oh_my_zsh_installed.stat.exists
 
 - name: Reload Zsh configuration (optional)
-  shell: source {{ ansible_env.HOME }}/.zshrc
+  shell: source {{ user_home.stdout }}/.zshrc
   args:
     executable: /bin/zsh
