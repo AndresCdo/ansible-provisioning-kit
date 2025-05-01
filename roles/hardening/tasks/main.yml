@@ -160,7 +160,7 @@
     - name: Allow necessary incoming ports
       ufw:
         rule: allow
-        port: "{{ item }}"
+        port: "{{ item | int }}"
         proto: tcp
       loop: "{{ ufw_allowed_ports | default([2222, 80, 443]) }}" # Add default filter
 
