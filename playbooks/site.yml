@@ -1,6 +1,25 @@
 ---
 - hosts: all
   become: true
+
+  vars:
+    # override these on the CLI or in group_vars/host_vars
+    cloud_provider: "{{ cloud_provider | default('gcp') }}"
+    orchestrator:   "{{ orchestrator   | default('microk8s') }}"
+
+  pre_tasks:
+    - name: "Ensure exactly one cloud_provider is set (gcp or aws)"
+      assert:
+        that:
+          - cloud_provider in ['gcp','aws']
+        fail_msg: "You must set cloud_provider to 'gcp' or 'aws', not both."
+
+    - name: "Ensure exactly one orchestrator is set (microk8s or minikube)"
+      assert:
+        that:
+          - orchestrator in ['microk8s','minikube']
+        fail_msg: "You must set orchestrator to 'microk8s' or 'minikube', not both."
+
   roles:
     - essentials
     - zsh
@@ -9,9 +28,18 @@
     - podman
     - jenkins
     - nginx
-    - google-sdk
-    - microk8s
-    - minikube
+
+    - role: google-sdk
+      when: cloud_provider == 'gcp'
+
+    - role: aws_cli
+      when: cloud_provider == 'aws'
+
+    - role: microk8s
+      when: orchestrator == 'microk8s'
+
+    - role: minikube
+      when: orchestrator == 'minikube'
+
     - packer
     - terraform
-    - aws_cli
