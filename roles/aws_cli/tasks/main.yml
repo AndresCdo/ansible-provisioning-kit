@@ -14,7 +14,7 @@
     url: "{{ aws_cli_url }}"
     dest: "{{ aws_cli_zip_path }}"
     mode: 0755
-  when: aws_cli_version is defined and aws_cli_version.output == ""
+  when: aws_cli_version is defined and aws_cli_version.rc != 0
   register: download_result
 
 - name: Ensure AWS CLI package is downloaded
