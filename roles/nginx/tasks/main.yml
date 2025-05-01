@@ -28,7 +28,7 @@
 - name: Test NGINX configuration
   ansible.builtin.shell:
     cmd: nginx -t
-  notify: reload_nginx
+  notify: reload nginx
 
 - name: Ensure NGINX service is started and enabled
   ansible.builtin.systemd:
