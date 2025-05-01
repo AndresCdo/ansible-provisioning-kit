@@ -20,6 +20,7 @@
   register: oh_my_zsh_installed
 
 - name: Install Oh My Zsh
+  become: false
   shell: |
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   args:
