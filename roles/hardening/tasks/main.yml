@@ -136,7 +136,7 @@
         rule: allow
         port: "{{ item }}"
         proto: tcp
-      loop: "{{ ufw_allowed_ports | default([22, 80, 443]) }}" # Add default filter
+      loop: "{{ ufw_allowed_ports | default([2222, 80, 443]) }}" # Add default filter
 
     - name: Enable UFW
       ufw:
