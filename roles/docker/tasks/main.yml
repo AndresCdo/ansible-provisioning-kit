@@ -16,10 +16,10 @@
     mode: '0755'
 
 - name: Add Docker GPG key
-  ansible.builtin.shell: |
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-  args:
-    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    keyring: /usr/share/keyrings/docker-archive-keyring.gpg
+    state: present
 
 - name: Add Docker repository
   ansible.builtin.apt_repository:
