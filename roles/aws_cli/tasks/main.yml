@@ -43,7 +43,6 @@
   ignore_errors: true
 
 - name: Restart AWS CLI service if needed
-- name: Restart AWS CLI service if needed
   when: install_result is defined and install_result.rc == 0
   service:
     name: aws-cli
