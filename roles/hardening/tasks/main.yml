@@ -1,0 +1,194 @@
+---
+# tasks file for hardening
+# Removed hosts, become, vars - handled by playbook
+
+- name: Add host key to known_hosts
+  become: false # Keep become: false here as it overrides the play
+  ansible.builtin.known_hosts:
+    name: "{{ ansible_host }}"
+    key: "{{ lookup('pipe', 'ssh-keyscan -H ' + ansible_host) }}"
+    state: present
+  changed_when: false
+  delegate_to: localhost
+
+- name: Update package cache and upgrade system packages
+  block:
+    - name: Update package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Perform full system upgrade
+      apt:
+        upgrade: dist
+      async: "{{ upgrade_timeout | default(1800) }}" # Add default filter
+      poll: 0
+      register: upgrade_job
+
+    - name: Wait for system upgrade to complete
+      async_status:
+        jid: "{{ upgrade_job.ansible_job_id }}"
+      register: upgrade_result
+      until: upgrade_result.finished
+      retries: "{{ (upgrade_timeout | default(1800) / 60) | int }}" # Add default filter
+      delay: 60
+
+- name: Enforce password policies
+  block:
+    - name: Set strong password policy
+      pamd:
+        name: common-password
+        type: password
+        control: requisite
+        module_path: pam_pwquality.so
+        module_arguments:
+          - retry=3
+          - minlen=14
+          - difok=3
+          - ucredit=-1
+          - lcredit=-1
+          - dcredit=-1
+          - ocredit=-1
+          - reject_username
+          - enforce_for_root
+
+    - name: Set password expiration policy
+      lineinfile:
+        path: /etc/login.defs
+        regexp: '^PASS_MAX_DAYS'
+        line: "PASS_MAX_DAYS {{ password_expiry_days | default(90) }}" # Add default filter
+
+# ... (Release upgrade block commented out) ...
+
+- name: Manage system services
+  block:
+    - name: Stop and disable unused services
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - telnet
+        - rsh
+        - nfs-server
+        - rpcbind
+        - ftp
+        - apache2
+        - smbd
+      # Use ansible_facts.services if available, otherwise skip
+      when: item in ansible_facts.services | default({})
+
+- name: Harden SSH configuration
+  block:
+    - name: Configure SSH parameters
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: '0644'
+        backup: yes
+        create: yes
+        regexp: "{{ item.key }}"
+        line: "{{ item.value }}"
+        state: present
+        validate: '/usr/sbin/sshd -t -f %s'
+      loop: "{{ sshd_params | default({}) | dict2items }}" # Add default filter
+      vars:
+        # Define default sshd_params here or in defaults/main.yml
+        sshd_params:
+          '^Protocol': 'Protocol 2'
+          '^PermitRootLogin': 'PermitRootLogin no'
+          '^PasswordAuthentication': 'PasswordAuthentication no'
+          '^PermitEmptyPasswords': 'PermitEmptyPasswords no'
+          '^ChallengeResponseAuthentication': 'ChallengeResponseAuthentication no'
+          '^UsePAM': 'UsePAM yes'
+          '^X11Forwarding': 'X11Forwarding no'
+          '^AllowAgentForwarding': 'AllowAgentForwarding no'
+          '^AllowTcpForwarding': 'AllowTcpForwarding no'
+          '^MaxAuthTries': 'MaxAuthTries 6'
+          '^LoginGraceTime': 'LoginGraceTime 60'
+          '^MaxSessions': 'MaxSessions 2'
+          '^ClientAliveInterval': 'ClientAliveInterval 300'
+          '^ClientAliveCountMax': 'ClientAliveCountMax 2'
+          '^AllowUsers': "AllowUsers {{ allowed_users | default(['ubuntu']) | join(' ') }}" # Add default filter
+          '^Ciphers': 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
+          '^MACs': 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com'
+          '^KexAlgorithms': 'KexAlgorithms curve25519-sha256@libssh.org,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256'
+      notify: Restart SSHD
+
+- name: Configure firewall
+  block:
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Set default UFW policies
+      ufw:
+        default: "{{ item.policy }}"
+        direction: "{{ item.direction }}"
+      loop:
+        - { direction: incoming, policy: deny }
+        - { direction: outgoing, policy: allow }
+
+    - name: Allow necessary incoming ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ ufw_allowed_ports | default([22, 80, 443]) }}" # Add default filter
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+      notify: Restart UFW
+
+- name: Install and configure system monitoring
+  block:
+    - name: Install auditd package
+      apt:
+        name: auditd
+        state: present
+      notify: Restart Auditd
+
+- name: Restrict su access
+  block:
+    - name: Modify PAM configuration for su
+      lineinfile:
+        path: /etc/pam.d/su
+        regexp: '^#?\s*auth\s+required\s+pam_wheel.so'
+        line: 'auth required pam_wheel.so use_uid'
+
+    - name: Ensure wheel group exists
+      group:
+        name: wheel
+        state: present
+
+    - name: Add allowed users to wheel group
+      user:
+        name: "{{ item }}"
+        groups: wheel
+        append: yes
+      with_items: "{{ allowed_users | default(['ubuntu']) }}" # Add default filter
+      notify: Reload PAM
+
+- name: Install and configure Fail2Ban
+  block:
+    - name: Install Fail2Ban
+      apt:
+        name: fail2ban
+        state: present
+      notify: Restart Fail2Ban
+
+    - name: Configure Fail2Ban for SSH
+      template:
+        src: fail2ban_sshd.local.j2 # Assumes template is in roles/hardening/templates/
+        dest: /etc/fail2ban/jail.d/sshd.local
+      notify: Restart Fail2Ban
+
+- name: Ensure system is up-to-date (final check)
+  apt:
+    update_cache: yes
+    upgrade: dist
+    cache_valid_time: 3600
+  notify: Reload Systemd

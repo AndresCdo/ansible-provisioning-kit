@@ -1,0 +1,46 @@
+---
+# tasks file for microk8s
+# Removed hosts, become - handled by playbook
+
+- name: Update apt cache and install dependencies
+  apt:
+    name:
+      - snapd
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Ensure MicroK8s is installed
+  snap:
+    name: microk8s
+    state: present
+    classic: yes
+    channel: "1.27/stable" # Consider making channel a variable
+
+- name: Add user to microk8s group
+  user:
+    name: "{{ ansible_user_id }}" # Use fact instead of ansible_user variable
+    groups: microk8s
+    append: yes
+
+- name: Enable basic MicroK8s add-ons
+  command: microk8s enable dns storage
+  # Check if command exists instead of relying on pkg_mgr fact
+  when: microk8s_path.stat.exists
+
+- name: Check if microk8s command exists
+  stat:
+    path: /snap/bin/microk8s
+  register: microk8s_path
+
+- name: Check MicroK8s status
+  become: false # Run as user
+  command: microk8s status --wait-ready --timeout=300 # Add wait
+  register: microk8s_status
+  when: microk8s_path.stat.exists
+  changed_when: false
+
+- name: Debug MicroK8s status
+  debug:
+    msg: "MicroK8s status: {{ microk8s_status.stdout }}"
+  when: microk8s_status is defined and microk8s_status.stdout is defined

@@ -1,0 +1,73 @@
+---
+- name: Install required packages and update apt cache
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - software-properties-common
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install Helm
+  block:
+    - name: Check if Helm is installed
+      command: helm version
+      register: helm_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Download Helm install script if not present
+      get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: /tmp/get-helm-3
+        mode: '0755'
+      when: helm_check.rc != 0
+
+    - name: Run Helm install script
+      command: /tmp/get-helm-3
+      when: helm_check.rc != 0
+
+- name: Install kubectl
+  block:
+    - name: Check if kubectl is installed
+      stat:
+        path: /usr/local/bin/kubectl
+      register: kubectl_check
+      changed_when: false
+
+    - name: Download kubectl if not installed
+      get_url:
+        url: "https://dl.k8s.io/release/{{ lookup('url', 'https://dl.k8s.io/release/stable.txt') }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+      when: not kubectl_check.stat.exists
+
+- name: Install Minikube
+  block:
+    - name: Check if Minikube is installed
+      stat:
+        path: /usr/local/bin/minikube
+      register: minikube_check
+      changed_when: false
+
+    - name: Download Minikube if not installed
+      get_url:
+        url: https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+        dest: /usr/local/bin/minikube
+        mode: '0755'
+      when: not minikube_check.stat.exists
+
+- name: Print Minikube status (if installed)
+  become: false
+  command: minikube status
+  register: minikube_status
+  when: minikube_check.stat.exists
+  changed_when: false
+  ignore_errors: true
+
+- name: Debug Minikube status
+  debug:
+    msg: "Minikube status: {{ minikube_status.stdout | default('Not running or error') }}"
+  when: minikube_check.stat.exists

@@ -1,0 +1,56 @@
+---
+# tasks file for zsh role
+# Removed hosts, become - handled by playbook
+
+- name: Ensure Zsh is installed
+  ansible.builtin.apt:
+    name: zsh
+    state: present
+    update_cache: yes
+
+- name: Ensure Zsh is listed in /etc/shells
+  lineinfile:
+    path: /etc/shells
+    line: /usr/bin/zsh
+    state: present
+
+- name: Check if Oh My Zsh is installed
+  stat:
+    path: "{{ ansible_env.HOME }}/.oh-my-zsh"
+  register: oh_my_zsh_installed
+
+- name: Install Oh My Zsh
+  shell: |
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+  args:
+    creates: "{{ ansible_env.HOME }}/.oh-my-zsh"
+  when: not oh_my_zsh_installed.stat.exists
+
+- name: Set Zsh as the default shell
+  user:
+    name: "{{ ansible_env.USER }}"
+    shell: /usr/bin/zsh
+
+- name: Verify Zsh is the default shell
+  shell: echo $SHELL
+  register: default_shell
+  changed_when: false
+  failed_when: "'/usr/bin/zsh' not in default_shell.stdout"
+
+- name: Print the current default shell
+  debug:
+    msg: "Default shell is {{ default_shell.stdout }}"
+
+- name: Configure a custom theme for Oh My Zsh (optional)
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_env.HOME }}/.zshrc"
+    regexp: '^ZSH_THEME="(.*)"'
+    line: 'ZSH_THEME="agnoster"' # Example theme
+    backrefs: yes
+  when: oh_my_zsh_installed.stat.exists # Only configure if .zshrc exists
+  become: false # Edit user's file
+
+- name: Reload Zsh configuration (optional)
+  shell: source {{ ansible_env.HOME }}/.zshrc
+  args:
+    executable: /bin/zsh

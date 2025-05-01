@@ -1,0 +1,121 @@
+---
+# tasks file for jenkins
+# Removed hosts, become, gather_facts, vars - handled by playbook
+
+- name: Ensure prerequisites are installed
+  ansible.builtin.apt:
+    name:
+      - openjdk-17-jdk # Ensure Java is installed
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+
+- name: Create Jenkins keyring directory
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Add Jenkins repository key
+  ansible.builtin.shell: |
+    curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/jenkins-keyring.gpg
+
+- name: Add Jenkins repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
+    state: present
+    filename: jenkins
+
+- name: Install Jenkins
+  ansible.builtin.apt:
+    name: jenkins
+    state: latest
+    install_recommends: no
+  notify: reload jenkins # Use handler
+
+- name: Configure Jenkins to skip the installation wizard
+  ansible.builtin.lineinfile:
+    path: /etc/default/jenkins
+    line: 'JAVA_ARGS="-Djenkins.install.runSetupWizard=false"'
+    state: present
+  notify: reload jenkins # Use handler
+
+- name: Create Jenkins systemd override directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/jenkins.service.d
+    state: directory
+    mode: "0755"
+
+- name: Modify Jenkins systemd unit file to increase startup timeout
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      TimeoutStartSec=900
+    dest: /etc/systemd/system/jenkins.service.d/override.conf
+    mode: "0644"
+  notify: reload systemd # Add systemd reload handler
+
+- name: Ensure Jenkins service is started and enabled
+  ansible.builtin.systemd:
+    name: jenkins
+    state: started
+    enabled: yes
+
+- name: Copy list of suggested Jenkins plugins
+  ansible.builtin.copy:
+    src: suggested-plugins.txt # Assumes file is in roles/jenkins/files/
+    dest: /tmp/suggested-plugins.txt
+
+- name: Check if the Jenkins plugin installation tool is already installed
+  ansible.builtin.stat:
+    path: /tmp/jenkins-plugin-manager.jar
+  register: jenkins_plugin_manager
+
+- name: Download Jenkins plugin installation tool
+  ansible.builtin.get_url:
+    url: https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.12.3/jenkins-plugin-manager-2.12.3.jar
+    dest: /tmp/jenkins-plugin-manager.jar
+    mode: "0755"
+  when: not jenkins_plugin_manager.stat.exists
+
+- name: Install Jenkins plugins asynchronously
+  ansible.builtin.command: >
+    /usr/bin/java -jar /tmp/jenkins-plugin-manager.jar
+    --verbose
+    --plugin-download-directory=/var/lib/jenkins/plugins
+    --plugin-file=/tmp/suggested-plugins.txt
+  async: 1200
+  poll: 0
+  register: install_plugins_job
+  notify: reload jenkins # Use handler
+
+- name: Check status of Jenkins plugins installation
+  ansible.builtin.async_status:
+    jid: "{{ install_plugins_job.ansible_job_id }}"
+  register: install_plugins_result
+  until: install_plugins_result.finished
+  retries: 30
+  delay: 10
+
+- name: Set ownership of Jenkins plugins directory
+  ansible.builtin.file:
+    path: /var/lib/jenkins/plugins
+    owner: jenkins
+    group: jenkins
+    recurse: yes
+  when: install_plugins_result.changed # Only run if plugins were installed
+
+- name: Display Jenkins initial admin password
+  ansible.builtin.shell:
+    cmd: cat /var/lib/jenkins/secrets/initialAdminPassword
+  register: jenkins_password
+  changed_when: false
+
+- name: Print Jenkins initial admin password
+  ansible.builtin.debug:
+    msg: "Jenkins initial admin password: {{ jenkins_password.stdout }}"

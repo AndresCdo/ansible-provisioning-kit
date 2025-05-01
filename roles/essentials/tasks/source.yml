@@ -1,9 +1,0 @@
-- name: Allow switch shell
-  become: true
-  replace:
-    path: /etc/pam.d/chsh
-    regexp: 'auth       required   pam_shells.so'
-    replace: 'auth       sufficient   pam_shells.so'
-
-- name: Select ZSH as default
-  shell: chsh $USER -s $(which zsh) && echo exec zsh >> ~/.bashrc 

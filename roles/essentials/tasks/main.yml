@@ -1,8 +1,11 @@
-- name: Install Dependencies
-  import_tasks: pre-setup.yml
-  
-- name: Set ZSH as default
-  import_tasks: source.yml
-  
-- name: Install Oh-My-ZSH
-  import_tasks: install.yml
+---
+# tasks file for essentials role
+- name: Install essential packages
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - vim
+      - curl
+      # Removed zsh - handled by zsh role
+    state: present
+    update_cache: yes

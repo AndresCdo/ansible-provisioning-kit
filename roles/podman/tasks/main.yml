@@ -1,0 +1,28 @@
+---
+# tasks file for podman
+# Removed hosts, become, gather_facts, vars - handled by playbook
+
+- name: Fail if not running on Ubuntu
+  ansible.builtin.fail:
+    msg: "This playbook is intended for Ubuntu systems only."
+  when: ansible_distribution != "Ubuntu"
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+  changed_when: false
+
+- name: Install Podman package from Ubuntu repos
+  ansible.builtin.apt:
+    name: "{{ podman_package | default('podman') }}" # Add default filter
+    state: present
+  retries: 3
+  delay: 10
+  register: apt_result
+  until: apt_result is success
+
+- name: Verify Podman installation
+  ansible.builtin.command: podman --version
+  register: podman_version
+  changed_when: false
+  notify: Display Podman version

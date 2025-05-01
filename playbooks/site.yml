@@ -1,0 +1,17 @@
+---
+- hosts: all
+  become: true
+  roles:
+    - essentials
+    - zsh
+    - hardening
+    - docker
+    - podman
+    - jenkins
+    - nginx
+    - google_sdk
+    - microk8s
+    - minikube
+    - packer
+    - terraform
+    - aws_cli

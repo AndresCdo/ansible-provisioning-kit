@@ -1,9 +1,0 @@
-- name: Install general dependencies
-  become: true
-  apt:
-    pkg:
-      - 'build-essential'
-      - 'vim'
-      - 'curl'
-      - 'zsh'
-    state: latest

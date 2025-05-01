@@ -1,0 +1,34 @@
+- name: Restart SSHD
+  systemd:
+    name: sshd
+    state: restarted
+    enabled: yes
+
+- name: Restart UFW
+  systemd:
+    name: ufw
+    state: restarted
+    enabled: yes
+
+- name: Reload Systemd
+  systemd:
+    daemon_reload: yes
+
+- name: Restart Auditd
+  systemd:
+    name: auditd
+    state: restarted
+    enabled: yes
+
+- name: Reload PAM
+  shell: echo -e "\n" | pam-auth-update --force
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  register: pam_result
+  failed_when: pam_result.rc != 0
+
+- name: Restart Fail2Ban
+  systemd:
+    name: fail2ban
+    state: restarted
+    enabled: yes
