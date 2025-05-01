@@ -2,49 +2,45 @@
 - name: Check if AWS CLI is installed
   command: aws --version
   register: aws_cli_version
-  ignore_errors: true
+  changed_when: false
+  failed_when: false
 
-- name: Show AWS CLI version
+- name: Show AWS CLI version if installed
   debug:
     var: aws_cli_version.stdout
-  when: aws_cli_version is defined
+  when: aws_cli_version.rc == 0
 
-- name: Download AWS CLI package
-  get_url:
-    url: "{{ aws_cli_url }}"
-    dest: "{{ aws_cli_zip_path }}"
-    mode: 0755
-  when: aws_cli_version is defined and aws_cli_version.rc != 0
-  register: download_result
+- block:
+    - name: Download AWS CLI package
+      get_url:
+        url: "{{ aws_cli_url }}"
+        dest: "{{ aws_cli_zip_path }}"
+        mode: 0755
+      register: download_result
 
-- name: Ensure AWS CLI package is downloaded
-  when: download_result is defined and download_result is success
-  assert:
-    that:
-      - download_result is success
+    - name: Unzip AWS CLI package
+      unarchive:
+        src: "{{ aws_cli_zip_path }}"
+        dest: "{{ aws_cli_install_dir }}"
+        remote_src: yes
 
-- name: Unzip AWS CLI package
-  when: download_result is defined and download_result is success
-  unarchive:
-    src: "{{ aws_cli_zip_path }}"
-    dest: "{{ aws_cli_install_dir }}"
-    remote_src: yes
+    - name: Make AWS CLI install script executable
+      file:
+        path: "{{ aws_cli_install_script }}"
+        mode: u+x
+        
+    - name: Execute AWS CLI install script
+      command: "{{ aws_cli_install_script }}"
+      register: install_result
 
-- name: Ensure AWS CLI install script is executable
-  when: download_result is defined and download_result is success
-  file:
-    path: "{{ aws_cli_install_script }}"
-    mode: u+x
-    
-- name: Execute AWS CLI install script
-  when: download_result is defined and download_result is success
-  command: "{{ aws_cli_install_script }}"
-  register: install_result
-  ignore_errors: true
-
-- name: Restart AWS CLI service if needed
-  when: install_result is defined and install_result.rc == 0
-  service:
-    name: aws-cli
-    state: restarted
+    - name: Clean up downloaded archive
+      file:
+        path: "{{ aws_cli_zip_path }}"
+        state: absent
+      changed_when: false
   
+  when: aws_cli_version.rc != 0
+  rescue:
+    - name: Installation failed
+      fail:
+        msg: "AWS CLI installation failed. Please check the logs."
