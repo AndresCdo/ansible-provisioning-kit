@@ -4,11 +4,20 @@
 
 - name: Add host key to known_hosts
   become: false # Keep become: false here as it overrides the play
-  ansible.builtin.known_hosts:
-    name: "{{ ansible_host }}"
-    key: "{{ lookup('pipe', 'ssh-keyscan -H ' + ansible_host) }}"
-    state: present
-  changed_when: false
+  block:
+    - name: Get host key
+      command: "ssh-keyscan -H {{ ansible_host }}"
+      register: keyscan_result
+      changed_when: false
+      retries: 3
+      delay: 5
+      until: keyscan_result.rc == 0
+
+    - name: Add key to known_hosts
+      ansible.builtin.known_hosts:
+        name: "{{ ansible_host }}"
+        key: "{{ keyscan_result.stdout }}"
+        state: present
   delegate_to: localhost
 
 - name: Update package cache and upgrade system packages
