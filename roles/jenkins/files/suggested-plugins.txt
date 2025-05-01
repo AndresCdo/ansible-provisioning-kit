@@ -1,0 +1,6 @@
+dark-theme
+git
+ansicolor
+pipeline
+pipeline-stage-view
+timestamper
