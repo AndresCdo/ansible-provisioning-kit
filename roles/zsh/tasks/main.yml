@@ -49,10 +49,6 @@
   debug:
     msg: "Configured default shell is {{ configured_shell.stdout }}"
 
-- name: Print the current default shell
-  debug:
-    msg: "Default shell is {{ default_shell.stdout }}"
-
 - name: Copy .zshrc template if it doesn't exist
   become: false
   ansible.builtin.copy:
