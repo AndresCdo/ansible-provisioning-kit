@@ -18,35 +18,34 @@
   register: download_result
 
 - name: Ensure AWS CLI package is downloaded
-  when: download_result is defined
+  when: download_result is defined and download_result is success
   assert:
     that:
       - download_result is success
 
 - name: Unzip AWS CLI package
-  when: download_result is defined
+  when: download_result is defined and download_result is success
   unarchive:
     src: "{{ aws_cli_zip_path }}"
     dest: "{{ aws_cli_install_dir }}"
     remote_src: yes
 
 - name: Ensure AWS CLI install script is executable
-  when: download_result is defined
+  when: download_result is defined and download_result is success
   file:
     path: "{{ aws_cli_install_script }}"
     mode: u+x
     
 - name: Execute AWS CLI install script
-  when: download_result is defined
+  when: download_result is defined and download_result is success
   command: "{{ aws_cli_install_script }}"
-  
   register: install_result
   ignore_errors: true
 
 - name: Restart AWS CLI service if needed
-  when: install_result is defined
+- name: Restart AWS CLI service if needed
+  when: install_result is defined and install_result.rc == 0
   service:
     name: aws-cli
     state: restarted
-
   
