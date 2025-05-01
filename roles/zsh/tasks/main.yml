@@ -41,6 +41,15 @@
   debug:
     msg: "Default shell is {{ default_shell.stdout }}"
 
+- name: Copy .zshrc template if it doesn't exist
+  ansible.builtin.copy:
+    src: "{{ ansible_env.HOME }}/.oh-my-zsh/templates/zshrc.zsh-template"
+    dest: "{{ ansible_env.HOME }}/.zshrc"
+    remote_src: yes
+    force: no
+  when: oh_my_zsh_installed.stat.exists
+  become: false
+
 - name: Configure a custom theme for Oh My Zsh (optional)
   ansible.builtin.lineinfile:
     path: "{{ ansible_env.HOME }}/.zshrc"
