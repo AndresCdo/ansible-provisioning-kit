@@ -5,6 +5,14 @@
 - name: Add host key to known_hosts
   become: false # Keep become: false here as it overrides the play
   block:
+    - name: Check if SSH is running
+      wait_for:
+        port: 22
+        timeout: 5
+      register: ssh_check
+      ignore_errors: true
+      when: ansible_host != 'localhost' and ansible_host != '127.0.0.1'
+
     - name: Get host key
       command: "ssh-keyscan -H {{ ansible_host }}"
       register: keyscan_result
@@ -12,13 +20,22 @@
       retries: 3
       delay: 5
       until: keyscan_result.rc == 0
+      when: 
+        - ansible_host != 'localhost'
+        - ansible_host != '127.0.0.1'
+        - ssh_check is success
 
     - name: Add key to known_hosts
       ansible.builtin.known_hosts:
         name: "{{ ansible_host }}"
         key: "{{ keyscan_result.stdout }}"
         state: present
+      when: 
+        - ansible_host != 'localhost'
+        - ansible_host != '127.0.0.1'
+        - keyscan_result is success
   delegate_to: localhost
+  ignore_errors: true
 
 - name: Update package cache and upgrade system packages
   block:
