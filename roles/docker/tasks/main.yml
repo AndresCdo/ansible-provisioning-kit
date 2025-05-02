@@ -53,6 +53,9 @@
     append: yes
   loop: "{{ docker_users | default(['ubuntu']) }}" # Make users configurable via variable
 
+- name: Reset connection to apply group changes
+  ansible.builtin.meta: reset_connection
+
 - name: Test Docker installation
   ansible.builtin.command: docker run hello-world
   register: docker_hello_world
