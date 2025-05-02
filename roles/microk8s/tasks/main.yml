@@ -23,10 +23,23 @@
     groups: microk8s
     append: yes
 
-- name: Check if microk8s command exists
-  stat:
-    path: /snap/bin/microk8s
-  register: microk8s_path
+- name: Ensure .kube directory exists with proper permissions
+  file:
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: '0755'
+
+- name: Reset connection to reload user groups
+  meta: reset_connection
+
+- name: Check MicroK8s status
+  become: true # Use sudo to avoid permission issues
+  command: microk8s status --wait-ready --timeout=300 # Add wait
+  register: microk8s_status
+  when: microk8s_path.stat.exists
+  changed_when: false
 
 - name: Enable basic MicroK8s add-ons
   command: microk8s enable dns storage
