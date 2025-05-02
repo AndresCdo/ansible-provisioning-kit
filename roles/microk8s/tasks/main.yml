@@ -43,6 +43,8 @@
   register: microk8s_path
 
 - name: Reset connection to reload user groups
+  meta: reset_connection
+  when: microk8s_path.stat.exists
   changed_when: false
 
 - name: Enable basic MicroK8s add-ons
