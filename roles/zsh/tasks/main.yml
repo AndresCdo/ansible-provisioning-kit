@@ -68,6 +68,8 @@
   when: oh_my_zsh_installed.stat.exists
 
 - name: Reload Zsh configuration (optional)
-  shell: source {{ user_home.stdout }}/.zshrc
-  args:
-    executable: /bin/zsh
+  become: false
+  debug:
+    msg: "Zsh configuration will be applied on next login"
+  changed_when: false
+  when: oh_my_zsh_installed.stat.exists
