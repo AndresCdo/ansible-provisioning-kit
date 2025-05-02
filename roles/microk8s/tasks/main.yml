@@ -18,6 +18,7 @@
     channel: "1.27/stable" # Consider making channel a variable
 
 - name: Add user to microk8s group
+  become: true # Modifying system users requires root privileges
   user:
     name: "{{ ansible_user_id }}" # Use fact instead of ansible_user variable
     groups: microk8s
@@ -27,9 +28,14 @@
   file:
     path: "{{ ansible_env.HOME }}/.kube"
     state: directory
-    owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
     mode: '0755'
+
+# Add chown task as suggested by microk8s error output
+- name: Ensure correct ownership of .kube directory contents
+  become: true # Need sudo to chown potentially root-owned files if microk8s created them
+  command: "chown -R {{ ansible_user_id }}:{{ ansible_user_id }} {{ ansible_env.HOME }}/.kube"
+  changed_when: false # This command should be idempotent in effect
 
 - name: Check if MicroK8s executable exists
   stat:
@@ -37,12 +43,12 @@
   register: microk8s_path
 
 - name: Reset connection to reload user groups
-  meta: reset_connection
+  changed_when: false
 
-- name: Check MicroK8s status
-  become: true # Use sudo to avoid permission issues
-  command: microk8s status --wait-ready --timeout=300 # Add wait
-  register: microk8s_status
+- name: Enable basic MicroK8s add-ons
+  become: true # Run enable with sudo to avoid potential permission issues
+  command: microk8s enable dns storage
+  # Check if command exists instead of relying on pkg_mgr fact
   when: microk8s_path.stat.exists
   changed_when: false
 
@@ -51,14 +57,14 @@
   # Check if command exists instead of relying on pkg_mgr fact
   when: microk8s_path.stat.exists
 
-- name: Check MicroK8s status
-  become: false # Run as user
+- name: Check MicroK8s status after enabling addons
+  become: true # Run with sudo to ensure permissions
   command: microk8s status --wait-ready --timeout=300 # Add wait
-  register: microk8s_status
+  register: microk8s_status_after_addons # Use a different register variable name
   when: microk8s_path.stat.exists
   changed_when: false
 
-- name: Debug MicroK8s status
+- name: Debug MicroK8s status after enabling addons
   debug:
-    msg: "MicroK8s status: {{ microk8s_status.stdout }}"
-  when: microk8s_status is defined and microk8s_status.stdout is defined
+    msg: "MicroK8s status after addons: {{ microk8s_status_after_addons.stdout }}"
+  when: microk8s_status_after_addons is defined and microk8s_status_after_addons.stdout is defined
