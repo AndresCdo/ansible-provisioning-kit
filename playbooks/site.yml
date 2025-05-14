@@ -3,9 +3,9 @@
   become: true
 
   vars:
-    # override these on the CLI or in group_vars/host_vars
-    cloud_provider: "{{ cloud_provider | default('gcp') }}"
-    orchestrator:   "{{ orchestrator   | default('microk8s') }}"
+    # override these on the CLI, in group_vars/host_vars, or via environment
+    cloud_provider: "{{ cloud_provider   | default('aws',      true) }}"
+    orchestrator:   "{{ orchestrator     | default('microk8s', true) }}"
 
   pre_tasks:
     - name: "Ensure exactly one cloud_provider is set (gcp or aws)"
