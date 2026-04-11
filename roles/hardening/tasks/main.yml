@@ -2,8 +2,13 @@
 # tasks file for hardening
 # Removed hosts, become, vars - handled by playbook
 
+- name: Gather service facts
+  ansible.builtin.service_facts:
+  tags: hardening
+
 - name: Add host key to known_hosts
   become: false # Keep become: false here as it overrides the play
+  tags: hardening
   block:
     - name: Check if SSH is running
       wait_for:
@@ -38,6 +43,7 @@
   ignore_errors: true
 
 - name: Update package cache and upgrade system packages
+  tags: hardening
   block:
     - name: Update package cache
       apt:
@@ -60,6 +66,7 @@
       delay: 60
 
 - name: Enforce password policies
+  tags: hardening
   block:
     - name: Set strong password policy
       pamd:
@@ -87,6 +94,7 @@
 # ... (Release upgrade block commented out) ...
 
 - name: Manage system services
+  tags: hardening
   block:
     - name: Stop and disable unused services
       systemd:
@@ -105,6 +113,7 @@
       when: item in ansible_facts.services | default({})
 
 - name: Harden SSH configuration
+  tags: hardening
   block:
     - name: Configure SSH parameters
       lineinfile:
@@ -143,6 +152,7 @@
       notify: Restart SSHD
 
 - name: Configure firewall
+  tags: hardening
   block:
     - name: Install UFW
       apt:
@@ -170,6 +180,7 @@
       notify: Restart UFW
 
 - name: Install and configure system monitoring
+  tags: hardening
   block:
     - name: Install auditd package
       apt:
@@ -178,6 +189,7 @@
       notify: Restart Auditd
 
 - name: Restrict su access
+  tags: hardening
   block:
     - name: Modify PAM configuration for su
       lineinfile:
@@ -199,6 +211,7 @@
       notify: Reload PAM
 
 - name: Install and configure Fail2Ban
+  tags: hardening
   block:
     - name: Install Fail2Ban
       apt:
@@ -213,6 +226,7 @@
       notify: Restart Fail2Ban
 
 - name: Ensure system is up-to-date (final check)
+  tags: hardening
   apt:
     update_cache: yes
     upgrade: dist
