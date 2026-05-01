@@ -9,6 +9,55 @@
     update_cache: yes
     install_recommends: no
 
+- name: Create SSL certificate directory
+  ansible.builtin.file:
+    path: /etc/nginx/ssl
+    state: directory
+    mode: '0700'
+    owner: root
+    group: root
+
+- name: Generate self-signed TLS certificate for development
+  block:
+    - name: Check if certificate already exists
+      ansible.builtin.stat:
+        path: /etc/nginx/ssl/jenkins.crt
+      register: ssl_cert_check
+
+    - name: Generate self-signed certificate
+      ansible.builtin.command: >
+        openssl req -x509 -nodes -days 3650 -newkey rsa:4096
+        -keyout /etc/nginx/ssl/jenkins.key
+        -out /etc/nginx/ssl/jenkins.crt
+        -subj "/CN={{ nginx_server_name | default('jenkins.local') }}"
+        -addext "subjectAltName=DNS:{{ nginx_server_name | default('jenkins.local') }},DNS:localhost,IP:127.0.0.1"
+      args:
+        creates: /etc/nginx/ssl/jenkins.crt
+      notify: test nginx config
+
+    - name: Set secure permissions on TLS private key
+      ansible.builtin.file:
+        path: /etc/nginx/ssl/jenkins.key
+        mode: '0600'
+        owner: root
+        group: root
+  when: not nginx_use_letsencrypt | default(false) | bool
+
+- name: Install certbot for Let's Encrypt (production TLS)
+  block:
+    - name: Install certbot and NGINX plugin
+      ansible.builtin.apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+    - name: Notify user to obtain certificate manually
+      ansible.builtin.debug:
+        msg: >
+          Run 'certbot --nginx -d {{ nginx_server_name | default('jenkins.example.com') }}'
+          to obtain a trusted TLS certificate.
+  when: nginx_use_letsencrypt | default(false) | bool
+
 - name: Configure NGINX for Jenkins
   ansible.builtin.template:
     src: jenkins.conf.j2

@@ -1,7 +1,8 @@
 [sshd]
 enabled = true
-port = ssh
+port = {{ fail2ban_ssh_port | default('22') }}
 filter = sshd
 logpath = /var/log/auth.log
-maxretry = 5
-bantime = 86400  ; 1 day
+maxretry = {{ fail2ban_maxretry | default('5') }}
+bantime = {{ fail2ban_bantime | default('86400') }}
+findtime = {{ fail2ban_findtime | default('600') }}

@@ -140,11 +140,15 @@
           '^X11Forwarding': 'X11Forwarding no'
           '^AllowAgentForwarding': 'AllowAgentForwarding no'
           '^AllowTcpForwarding': 'AllowTcpForwarding no'
-          '^MaxAuthTries': 'MaxAuthTries 6'
+          '^MaxAuthTries': 'MaxAuthTries 3'
           '^LoginGraceTime': 'LoginGraceTime 60'
           '^MaxSessions': 'MaxSessions 2'
           '^ClientAliveInterval': 'ClientAliveInterval 300'
           '^ClientAliveCountMax': 'ClientAliveCountMax 2'
+          '^LogLevel': 'LogLevel VERBOSE'
+          '^StrictModes': 'StrictModes yes'
+          '^IgnoreRhosts': 'IgnoreRhosts yes'
+          '^HostbasedAuthentication': 'HostbasedAuthentication no'
           '^AllowUsers': "AllowUsers {{ allowed_users | default(['ubuntu']) | join(' ') }}" # Add default filter
           '^Ciphers': 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
           '^MACs': 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com'
@@ -172,7 +176,7 @@
         rule: allow
         port: "{{ item | int }}"
         proto: tcp
-      loop: "{{ ufw_allowed_ports | default([2222, 80, 443]) }}" # Add default filter
+      loop: "{{ ufw_allowed_ports | default([22, 80, 443]) }}" # Add default filter
 
     - name: Enable UFW
       ufw:
@@ -186,6 +190,64 @@
       apt:
         name: auditd
         state: present
+      notify: Restart Auditd
+
+    - name: Deploy auditd rules for critical file integrity monitoring
+      copy:
+        content: |
+          ##
+          ## Hardening audit rules - deployed by Ansible
+          ## See ADR-001 and CIS Benchmark for Ubuntu Linux
+          ##
+
+          # Monitor authentication files
+          -w /etc/passwd -p wa -k identity
+          -w /etc/group -p wa -k identity
+          -w /etc/shadow -p wa -k identity
+          -w /etc/gshadow -p wa -k identity
+          -w /etc/sudoers -p wa -k sudoers
+          -w /etc/sudoers.d/ -p wa -k sudoers
+
+          # Monitor SSH configuration
+          -w /etc/ssh/sshd_config -p wa -k sshd_config
+          -w /etc/ssh/sshd_config.d/ -p wa -k sshd_config
+
+          # Monitor login events
+          -w /var/log/lastlog -p wa -k logins
+          -w /var/log/faillock/ -p wa -k logins
+
+          # Monitor cron configuration (detect unauthorized cron jobs)
+          -w /etc/cron.d/ -p wa -k cron
+          -w /etc/crontab -p wa -k cron
+          -w /etc/cron.daily/ -p wa -k cron
+          -w /etc/cron.hourly/ -p wa -k cron
+          -w /etc/cron.weekly/ -p wa -k cron
+          -w /etc/cron.monthly/ -p wa -k cron
+
+          # Monitor kernel module loading
+          -w /sbin/insmod -p x -k modules
+          -w /sbin/modprobe -p x -k modules
+          -w /sbin/rmmod -p x -k modules
+
+          # Monitor systemd unit file changes
+          -w /etc/systemd/system/ -p wa -k systemd
+          -w /lib/systemd/system/ -p wa -k systemd
+
+          # Monitor network configuration changes
+          -w /etc/network/ -p wa -k network
+          -w /etc/hosts -p wa -k network
+          -w /etc/hostname -p wa -k network
+
+          # Monitor system-wide policy changes
+          -w /etc/security/ -p wa -k security
+          -w /etc/pam.d/ -p wa -k security
+
+          # Disable auditd during runlevel switching to prevent lockout
+          -a always,exit -F arch=b64 -S mount -S umount2 -k mount
+        dest: /etc/audit/rules.d/50-hardening.rules
+        mode: '0640'
+        owner: root
+        group: root
       notify: Restart Auditd
 
 - name: Restrict su access
@@ -207,7 +269,7 @@
         name: "{{ item }}"
         groups: wheel
         append: yes
-      with_items: "{{ allowed_users | default(['ubuntu']) }}" # Add default filter
+      loop: "{{ allowed_users | default(['ubuntu']) }}" # Add default filter
       notify: Reload PAM
 
 - name: Install and configure Fail2Ban
@@ -224,6 +286,189 @@
         src: fail2ban_sshd.local.j2 # Assumes template is in roles/hardening/templates/
         dest: /etc/fail2ban/jail.d/sshd.local
       notify: Restart Fail2Ban
+
+- name: Apply kernel security parameters (sysctl)
+  tags: hardening
+  block:
+    - name: Deploy sysctl hardening configuration file
+      ansible.builtin.copy:
+        content: |
+          ##
+          ## Kernel hardening sysctl settings - deployed by Ansible
+          ## Ref: CIS Benchmark for Ubuntu Linux, ADR-001
+          ##
+
+          # --- Network: ICMP redirects (CIS 3.2.x) ---
+          net.ipv4.conf.all.send_redirects = 0
+          net.ipv4.conf.default.send_redirects = 0
+          net.ipv4.conf.all.accept_redirects = 0
+          net.ipv4.conf.default.accept_redirects = 0
+          net.ipv4.conf.all.secure_redirects = 0
+          net.ipv4.conf.default.secure_redirects = 0
+          net.ipv6.conf.all.accept_redirects = 0
+          net.ipv6.conf.default.accept_redirects = 0
+
+          # --- Network: source routing (CIS 3.3.x) ---
+          net.ipv4.conf.all.accept_source_route = 0
+          net.ipv4.conf.default.accept_source_route = 0
+          net.ipv6.conf.all.accept_source_route = 0
+          net.ipv6.conf.default.accept_source_route = 0
+
+          # --- Network: suspicious packet logging (CIS 3.2.x) ---
+          net.ipv4.conf.all.log_martians = 1
+          net.ipv4.conf.default.log_martians = 1
+
+          # --- Network: ICMP broadcast protection (CIS 3.2.x) ---
+          net.ipv4.icmp_echo_ignore_broadcasts = 1
+          net.ipv4.icmp_ignore_bogus_error_responses = 1
+
+          # --- Network: reverse path filtering (CIS 3.2.x) ---
+          net.ipv4.conf.all.rp_filter = 1
+          net.ipv4.conf.default.rp_filter = 1
+
+          # --- Kernel: disable SUID core dumps (CIS 1.6.x) ---
+          fs.suid_dumpable = 0
+
+          # --- Kernel: disable magic SysRq key (CIS 1.6.x) ---
+          kernel.sysrq = 0
+        dest: /etc/sysctl.d/99-hardening.conf
+        mode: '0644'
+        owner: root
+        group: root
+      register: sysctl_config
+      notify: Reload Sysctl
+
+    - name: Apply sysctl settings if configuration changed
+      ansible.builtin.command: sysctl --system
+      changed_when: false
+      when: sysctl_config is changed
+
+- name: Harden filesystem and restrict unused kernel modules
+  tags: hardening
+  block:
+    - name: Unload unused filesystem modules
+      modprobe:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - cramfs
+        - freevxfs
+        - hfs
+        - hfsplus
+        - jffs2
+        - udf
+      ignore_errors: yes
+
+    - name: Blacklist unused filesystem modules persistently
+      ansible.builtin.copy:
+        content: |
+          # Security hardening: blacklist unused filesystem modules
+          # Ref: CIS Benchmark for Ubuntu Linux, ADR-001
+          # These filesystems are rarely needed on servers and increase
+          # kernel attack surface.
+          install {{ item }} /bin/true
+        dest: "/etc/modprobe.d/{{ item }}-blacklist.conf"
+        mode: '0644'
+        owner: root
+        group: root
+      loop:
+        - cramfs
+        - freevxfs
+        - hfs
+        - hfsplus
+        - jffs2
+        - udf
+
+    - name: Disable USB storage if not required
+      ansible.builtin.copy:
+        content: |
+          # Security: disable USB storage to prevent data exfiltration
+          # and malware introduction via USB devices
+          install usb-storage /bin/true
+        dest: /etc/modprobe.d/usb-storage-blacklist.conf
+        mode: '0644'
+        owner: root
+        group: root
+
+- name: Configure systemd-journald for secure logging
+  tags: hardening
+  block:
+    - name: Set journald log retention and size limits
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/journald.conf
+        regexp: '^{{ item.key }}'
+        line: '{{ item.key }}={{ item.value }}'
+        state: present
+        backup: yes
+      loop:
+        - { key: 'SystemMaxUse', value: '500M' }
+        - { key: 'SystemMaxFileSize', value: '100M' }
+        - { key: 'MaxFileSec', value: '1month' }
+        - { key: 'Compress', value: 'yes' }
+        - { key: 'ForwardToSyslog', value: 'no' }
+      notify: Restart Journald
+
+- name: Configure system resource limits
+  tags: hardening
+  block:
+    - name: Set resource limits via limits.d
+      ansible.builtin.copy:
+        content: |
+          ##
+          ## System resource limits - deployed by Ansible
+          ## Ref: CIS Benchmark for Ubuntu Linux, ADR-001
+          ##
+
+          # Core dumps disabled for all users (prevents sensitive data leaks)
+          *               hard    core            0
+
+          # File descriptor limits
+          *               hard    nofile          1024
+          *               soft    nofile          1024
+
+          # Process limits (prevents fork bombs)
+          *               hard    nproc           4096
+          *               soft    nproc           2048
+
+          # Stack size limits (prevents stack overflow abuse)
+          *               hard    stack           8192
+          *               soft    stack           4096
+        dest: /etc/security/limits.d/99-hardening.conf
+        mode: '0644'
+        owner: root
+        group: root
+
+- name: Configure system-wide umask
+  tags: hardening
+  block:
+    - name: Set restrictive umask in /etc/login.defs
+      ansible.builtin.lineinfile:
+        path: /etc/login.defs
+        regexp: '^UMASK\s+'
+        line: 'UMASK 027'
+        state: present
+
+    - name: Set restrictive umask in /etc/profile
+      ansible.builtin.lineinfile:
+        path: /etc/profile
+        regexp: '^umask\s+'
+        line: 'umask 027'
+        state: present
+        create: yes
+
+- name: Install and configure AppArmor
+  tags: hardening
+  block:
+    - name: Install apparmor-utils
+      ansible.builtin.apt:
+        name: apparmor-utils
+        state: present
+
+    - name: Ensure AppArmor service is enabled and running
+      ansible.builtin.systemd:
+        name: apparmor
+        state: started
+        enabled: yes
 
 - name: Ensure system is up-to-date (final check)
   tags: hardening

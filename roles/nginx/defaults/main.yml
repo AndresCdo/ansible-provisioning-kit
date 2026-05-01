@@ -1,0 +1,14 @@
+---
+# defaults file for nginx role
+
+# Server name for the Jenkins reverse proxy
+# Used in TLS certificate CN and Subject Alternative Names
+nginx_server_name: jenkins.local
+
+# Set to true to use Let's Encrypt certificates instead of self-signed
+# When true, you must manually run certbot after provisioning:
+#   certbot --nginx -d {{ nginx_server_name }}
+nginx_use_letsencrypt: false
+
+# Jenkins backend port (must match Jenkins HTTP_PORT setting)
+jenkins_port: 8080

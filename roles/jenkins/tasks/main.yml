@@ -110,12 +110,22 @@
     recurse: yes
   when: install_plugins_result.changed # Only run if plugins were installed
 
-- name: Display Jenkins initial admin password
-  ansible.builtin.shell:
-    cmd: cat /var/lib/jenkins/secrets/initialAdminPassword
-  register: jenkins_password
-  changed_when: false
+- name: Retrieve Jenkins initial admin password securely
+  ansible.builtin.slurp:
+    src: /var/lib/jenkins/secrets/initialAdminPassword
+  register: jenkins_password_encoded
+  no_log: true  # Prevent file content from appearing in logs
+  ignore_errors: true  # File may not exist if no initial setup occurred
 
-- name: Print Jenkins initial admin password
+- name: Display Jenkins initial admin password location
   ansible.builtin.debug:
-    msg: "Jenkins initial admin password: {{ jenkins_password.stdout }}"
+    msg: "Jenkins initial admin password is stored at: /var/lib/jenkins/secrets/initialAdminPassword"
+  when: jenkins_password_encoded is success
+
+- name: Warn if Jenkins admin password file not found
+  ansible.builtin.debug:
+    msg: >
+      WARNING: Jenkins initial admin password file not found.
+      This is normal if Jenkins was already configured or if the
+      setup wizard was bypassed. Login using your configured credentials.
+  when: jenkins_password_encoded is failed

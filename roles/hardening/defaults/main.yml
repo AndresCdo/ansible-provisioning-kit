@@ -1,0 +1,37 @@
+---
+# defaults file for hardening role
+# Override these variables in group_vars/, host_vars/, or via --extra-vars
+
+# === Package Management ===
+# Timeout (in seconds) for system package upgrade async job
+upgrade_timeout: 1800
+
+# === Password Policy ===
+# Maximum password age in days (CIS benchmark: 90 or fewer)
+password_expiry_days: 90
+
+# === SSH Hardening ===
+# List of users allowed to SSH into the system
+allowed_users:
+  - ubuntu
+
+# Dictionary of sshd_config parameters
+# See tasks/main.yml for the full default set
+sshd_params: {}
+
+# === Firewall ===
+# List of TCP ports to allow through UFW
+ufw_allowed_ports:
+  - 22   # SSH (override if using non-standard port)
+  - 80   # HTTP
+  - 443  # HTTPS
+
+# === Fail2Ban ===
+# SSH port for Fail2Ban to monitor
+fail2ban_ssh_port: 22
+# Maximum retry attempts before ban
+fail2ban_maxretry: 5
+# Ban duration in seconds (default: 86400 = 1 day)
+fail2ban_bantime: 86400
+# Find time window in seconds (default: 600 = 10 minutes)
+fail2ban_findtime: 600

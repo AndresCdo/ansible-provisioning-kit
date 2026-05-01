@@ -15,11 +15,14 @@
     state: directory
     mode: '0755'
 
-- name: Add Docker GPG key
-  ansible.builtin.apt_key:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    keyring: /usr/share/keyrings/docker-archive-keyring.gpg
-    state: present
+- name: Download and install Docker GPG key
+  # NOTE: apt_key module is deprecated on Ubuntu 24.04+ (apt-key binary removed).
+  # Using direct download + gpg --dearmor per Docker official docs:
+  # https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
+  ansible.builtin.shell:
+    cmd: |
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    creates: /usr/share/keyrings/docker-archive-keyring.gpg
 
 - name: Add Docker repository
   ansible.builtin.apt_repository:

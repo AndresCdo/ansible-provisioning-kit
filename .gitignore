@@ -1,0 +1,36 @@
+# Ansible
+*.retry
+*.vault
+.vault_password
+vault-password
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Secrets / credentials — NEVER commit these
+.env
+*.key
+*.pem
+*.p12
+*.pfx
+**/ssl/*.key
+!roles/nginx/templates/*.j2
+
+# Logs
+*.log

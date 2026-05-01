@@ -32,3 +32,12 @@
     name: fail2ban
     state: restarted
     enabled: yes
+
+- name: Reload Sysctl
+  ansible.builtin.command: sysctl --system
+  changed_when: false
+
+- name: Restart Journald
+  systemd:
+    name: systemd-journald
+    state: restarted
